@@ -1,0 +1,40 @@
+name: untitled
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  image_picker: ^1.1.2
+  path: ^1.8.0
+  provider: ^6.0.3
+  path_provider: ^2.0.11
+  http: ^1.2.2
+  cupertino_icons: ^1.0.8
+  tflite_flutter: ^0.11.0
+  image: ^3.0.1
+  photo_manager: ^3.5.1
+  permission_handler: ^10.0.0
+  sqflite: ^2.0.0+4
+
+
+
+
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/mobilenetv2.tflite
+    - assets/Test.jpg
+    # - assets/labels.txt  # 可选的标签文件

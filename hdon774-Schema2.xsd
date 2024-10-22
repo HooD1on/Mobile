@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+    <xs:element name="moves">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="move" minOccurs="1" maxOccurs="unbounded">
+                    <xs:complexType>
+                        <xs:all>
+
+                            <xs:element name="from">
+                                <xs:simpleType>
+                                    <xs:restriction base="xs:string">
+                                        <xs:pattern value="[a-h]{1}[1-8]{1}"/>
+                                    </xs:restriction>
+                                </xs:simpleType>
+                            </xs:element>
+                            <xs:element name="to">
+                                <xs:simpleType>
+                                    <xs:restriction base="xs:string">
+                                        <xs:pattern value="[a-h]{1}[1-8]{1}|bin"/>
+                                    </xs:restriction>
+                                </xs:simpleType>
+                            </xs:element>
+                        </xs:all>
+                        <xs:attribute name="piece">
+                            <xs:simpleType>
+                                <xs:restriction base="xs:string">
+                                    <xs:enumeration value="Kb"/>
+                                    <xs:enumeration value="Qb"/>
+                                    <xs:enumeration value="Rb"/>
+                                    <xs:enumeration value="Bb"/>
+                                    <xs:enumeration value="Nb"/>
+                                    <xs:enumeration value="Pb"/>
+                                    <xs:enumeration value="Kw"/>
+                                    <xs:enumeration value="Qw"/>
+                                    <xs:enumeration value="Rw"/>
+                                    <xs:enumeration value="Bw"/>
+                                    <xs:enumeration value="Nw"/>
+                                    <xs:enumeration value="Pw"/>
+                                </xs:restriction>
+                            </xs:simpleType>
+                        </xs:attribute>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+</xs:schema>
