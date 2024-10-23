@@ -4,15 +4,22 @@ import 'package:image_picker/image_picker.dart';
 import '../models/image_processing_model.dart';
 import 'dart:math' as math;
 import 'history_viewmodel.dart';
+import 'settings_viewmodel.dart';
+import 'package:provider/provider.dart';
 
 class ScanViewModel extends ChangeNotifier {
   XFile? _image;
   XFile? get image => _image;
   List<double>? _result;
   List<double>? get result => _result;
+  File? _originalImageFile;
 
+  late final ImageProcessingModel imageProcessingModel;
   final ImagePicker _picker = ImagePicker();
-  final ImageProcessingModel _imageProcessingModel = ImageProcessingModel();
+
+  ScanViewModel() {
+    imageProcessingModel = ImageProcessingModel();
+  }
 
   final Map<String, String> lesionTypeDict = {
     'akiec': 'Actinic keratoses',
@@ -22,35 +29,46 @@ class ScanViewModel extends ChangeNotifier {
     'mel': 'Melanoma',
     'nv': 'Melanocytic nevi',
     'vasc': 'Vascular lesions'
-
   };
-
-  String getClassLabel(int classIndex) {
-    List<String> keys = lesionTypeDict.keys.toList();
-    int adjustedIndex = classIndex;
-    if (adjustedIndex >= 0 && adjustedIndex < keys.length) {
-      return lesionTypeDict[keys[adjustedIndex]] ?? 'Unknown';
-    }
-    return 'Unknown';
-  }
 
   Future<void> pickImage(BuildContext context, HistoryViewModel historyViewModel) async {
     _image = await _picker.pickImage(source: ImageSource.camera);
     notifyListeners();
 
     if (_image != null) {
-      File imageFile = File(_image!.path);
-      await _imageProcessingModel.loadModel();
-      var inferenceResult = await _imageProcessingModel.runInference(imageFile);
-      _result = inferenceResult.cast<double>();
+      _originalImageFile = File(_image!.path);
+      await processImage(context, historyViewModel);
+    }
+  }
+
+  Future<void> processImage(BuildContext context, HistoryViewModel historyViewModel) async {
+    if (_originalImageFile == null) return;
+
+    try {
+      final settingsViewModel = Provider.of<SettingsViewModel>(context, listen: false);
+      await imageProcessingModel.loadModel();
+
+      _result = await imageProcessingModel.runInference(
+        _originalImageFile!,
+        brightness: settingsViewModel.brightness,
+        contrast: settingsViewModel.contrast,
+        clarity: settingsViewModel.clarity,
+        noiseReduction: settingsViewModel.noiseReduction,
+      );
+
       notifyListeners();
       await saveHistory(historyViewModel);
+    } catch (e) {
+      print('Error processing image: $e');
     }
   }
 
   Future<void> saveHistory(HistoryViewModel historyViewModel) async {
-    if (_image != null && _result != null) {
-      await historyViewModel.addHistory(_image!.path, getFormattedResult());
+    if (_originalImageFile != null && _result != null && imageProcessingModel.processedImageFile != null) {
+      await historyViewModel.addHistory(
+          imageProcessingModel.processedImageFile!.path,
+          getFormattedResult()
+      );
     }
   }
 
@@ -72,5 +90,20 @@ class ScanViewModel extends ChangeNotifier {
     }
 
     return formattedResult;
+  }
+
+  String getClassLabel(int classIndex) {
+    List<String> keys = lesionTypeDict.keys.toList();
+    if (classIndex >= 0 && classIndex < keys.length) {
+      return lesionTypeDict[keys[classIndex]] ?? 'Unknown';
+    }
+    return 'Unknown';
+  }
+
+  Future<void> onSettingsChanged(BuildContext context) async {
+    if (_originalImageFile != null) {
+      final historyViewModel = Provider.of<HistoryViewModel>(context, listen: false);
+      await processImage(context, historyViewModel);
+    }
   }
 }

@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../models/image_processing_model.dart';
 import '../viewmodels/history_viewmodel.dart';
+import '../viewmodels/settings_viewmodel.dart';
 import 'dart:math' as math;
 
 class HomeViewModel extends ChangeNotifier {
@@ -85,63 +86,118 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   Future<void> pickAndAnalyzeImage(BuildContext context) async {
-    print('Starting pickAndAnalyzeImage method');
+    final settingsViewModel = Provider.of<SettingsViewModel>(context, listen: false);
 
     var status = await Permission.photos.request();
     if (status.isGranted) {
-      print('Photos permission granted');
       final ImagePicker _picker = ImagePicker();
       try {
         final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
 
         if (pickedFile != null) {
-          print('Image picked: ${pickedFile.path}');
           File file = File(pickedFile.path);
-          print('File exists: ${await file.exists()}');
-          var result = await _imageProcessingModel.runInference(file);
-          print('Inference result: $result');
-          showInferenceResult(context, result);
+          if (!await file.exists()) {
+            throw Exception('Selected file does not exist');
+          }
 
-          // Save to history
-          final historyViewModel = Provider.of<HistoryViewModel>(context, listen: false);
-          List<double> probabilities = result.cast<double>();
-          int maxIndex = probabilities.indexOf(probabilities.reduce(math.max));
-          await historyViewModel.addHistory(file.path, formatResult(result, maxIndex: maxIndex));
-        } else {
-          print('No image selected');
+          var result = await _imageProcessingModel.runInference(
+            file,
+            brightness: settingsViewModel.brightness,
+            contrast: settingsViewModel.contrast,
+            clarity: settingsViewModel.clarity,
+            noiseReduction: settingsViewModel.noiseReduction,
+          );
+
+          if (!context.mounted) return;
+
+          if (_imageProcessingModel.processedImageFile != null) {
+            showInferenceResult(context, result);
+
+            final historyViewModel = Provider.of<HistoryViewModel>(context, listen: false);
+            List<double> probabilities = result.cast<double>();
+            int maxIndex = probabilities.indexOf(probabilities.reduce(math.max));
+            await historyViewModel.addHistory(
+                _imageProcessingModel.processedImageFile!.path,
+                formatResult(result, maxIndex: maxIndex)
+            );
+          }
         }
       } catch (e) {
         print('Error picking image: $e');
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error picking image: $e')),
         );
       }
     } else {
-      print('Photos permission denied');
       showPermissionDialog(context);
     }
   }
 
+  Future<void> onSettingsChanged(BuildContext context) async {
+    // 如果有测试图片并且已经加载了模型，重新分析图片
+    if (_originalTestImage != null && _isModelLoaded && !_isLoading) {
+      try {
+        final settingsViewModel = Provider.of<SettingsViewModel>(context, listen: false);
+
+        var result = await _imageProcessingModel.runInference(
+          _originalTestImage!,
+          brightness: settingsViewModel.brightness,
+          contrast: settingsViewModel.contrast,
+          clarity: settingsViewModel.clarity,
+          noiseReduction: settingsViewModel.noiseReduction,
+        );
+
+        if (result != null && result.isNotEmpty) {
+          if (!context.mounted) return;
+          showInferenceResult(context, result);
+        }
+      } catch (e) {
+        print('Error updating image with new settings: $e');
+      }
+    }
+  }
+
+  File? _originalTestImage;
+
   Future<void> analyzeTestImage(BuildContext context) async {
     try {
       setLoading(true);
-      _testImage = await _imageProcessingModel.loadImageFromAssets('assets/Test.jpg');
-      var result = await _imageProcessingModel.runInference(_testImage!);
-      setLoading(false);
-      if (result != null && result.isNotEmpty) {
-        showInferenceResult(context, result);
+      final settingsViewModel = Provider.of<SettingsViewModel>(context, listen: false);
 
-        // Save to history
-        final historyViewModel = Provider.of<HistoryViewModel>(context, listen: false);
-        List<double> probabilities = result.cast<double>();
-        int maxIndex = probabilities.indexOf(probabilities.reduce(math.max));
-        await historyViewModel.addHistory(_testImage!.path, formatResult(result, maxIndex: maxIndex));
+      if (_originalTestImage == null) {
+        _originalTestImage = await _imageProcessingModel.loadImageFromAssets('assets/Test.jpg');
+      }
+
+      if (_originalTestImage != null && await _originalTestImage!.exists()) {
+        var result = await _imageProcessingModel.runInference(
+          _originalTestImage!,
+          brightness: settingsViewModel.brightness,
+          contrast: settingsViewModel.contrast,
+          clarity: settingsViewModel.clarity,
+          noiseReduction: settingsViewModel.noiseReduction,
+        );
+
+        setLoading(false);
+        if (result.isNotEmpty && _imageProcessingModel.processedImageFile != null) {
+          if (!context.mounted) return;
+          showInferenceResult(context, result);
+
+          final historyViewModel = Provider.of<HistoryViewModel>(context, listen: false);
+          List<double> probabilities = result.cast<double>();
+          int maxIndex = probabilities.indexOf(probabilities.reduce(math.max));
+          await historyViewModel.addHistory(
+              _imageProcessingModel.processedImageFile!.path,
+              formatResult(result, maxIndex: maxIndex)
+          );
+        }
       } else {
-        throw Exception('Inference result is null or empty');
+        throw Exception('Test image file not found or invalid');
       }
     } catch (e) {
       setLoading(false);
       print('Error analyzing test image: $e');
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error analyzing test image: $e')),
       );
@@ -174,6 +230,12 @@ class HomeViewModel extends ChangeNotifier {
     return formattedResult;
   }
 
+  @override
+  void dispose() {
+    _originalTestImage = null;
+    super.dispose();
+  }
+
   void showInferenceResult(BuildContext context, List<dynamic> result) {
     List<double> probabilities = result.cast<double>();
     int maxIndex = probabilities.indexOf(probabilities.reduce(math.max));
@@ -182,8 +244,11 @@ class HomeViewModel extends ChangeNotifier {
     List<MapEntry<int, double>> sortedEntries = probabilities.asMap().entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
+    if (!context.mounted) return;
+
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text("Test Image Analysis Result"),
@@ -191,10 +256,11 @@ class HomeViewModel extends ChangeNotifier {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (_testImage != null)
+                if (_imageProcessingModel.processedImageFile != null)
                   Image.file(
-                    _testImage!,
+                    _imageProcessingModel.processedImageFile!,
                     height: 200,
+                    fit: BoxFit.contain,
                   ),
                 const SizedBox(height: 20),
                 Text("Predicted Class: ${getClassLabel(maxIndex)}"),
@@ -208,7 +274,7 @@ class HomeViewModel extends ChangeNotifier {
           ),
           actions: [
             TextButton(
-              child: const Text("OK"),
+              child: const Text("Close"),
               onPressed: () {
                 Navigator.of(context).pop();
               },
@@ -223,15 +289,15 @@ class HomeViewModel extends ChangeNotifier {
     showDialog(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        title: Text('Permission Required'),
-        content: Text('This app needs access to your photos to analyze skin images.'),
+        title: const Text('Permission Required'),
+        content: const Text('This app needs access to your photos to analyze skin images.'),
         actions: [
           TextButton(
-            child: Text('Open Settings'),
+            child: const Text('Open Settings'),
             onPressed: () => openAppSettings(),
           ),
           TextButton(
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
