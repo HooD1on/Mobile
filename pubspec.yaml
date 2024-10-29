@@ -38,4 +38,5 @@ flutter:
   assets:
     - assets/mobilenetv2.tflite
     - assets/Test.jpg
+    - assets/ic_launcher.png
     # - assets/labels.txt  # 可选的标签文件

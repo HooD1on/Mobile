@@ -5,10 +5,12 @@ import 'viewmodels/settings_viewmodel.dart';
 import 'viewmodels/history_viewmodel.dart';
 import 'viewmodels/scan_viewmodel.dart';
 import 'views/home_screen.dart';
+import 'splash_screen.dart';  // 添加 SplashScreen 的导入
 
 void main() {
   runApp(const MyApp());
 }
+
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -28,7 +30,7 @@ class MyApp extends StatelessWidget {
           primarySwatch: Colors.blue,
           useMaterial3: true,
         ),
-        home: const HomeScreen(),
+        home: const SplashScreen(),  // 添加 const
       ),
     );
   }
